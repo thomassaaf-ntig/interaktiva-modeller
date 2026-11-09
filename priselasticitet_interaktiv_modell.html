@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Priselasticitet – interaktiv modell</title>
+<style>
+  :root { color-scheme: light; --blue:#2878c8; --green:#23966c; --orange:#d97706; --ink:#243244; --muted:#64748b; --line:#dce3eb; --panel:#f5f7fa; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:24px; font-family:Arial,Helvetica,sans-serif; color:var(--ink); background:#fff; }
+  main { max-width:980px; margin:auto; }
+  h1 { margin:0 0 8px; font-size:clamp(24px,4vw,34px); }
+  .intro { color:var(--muted); margin:0 0 22px; line-height:1.5; }
+  .controls { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:18px; }
+  .panel { border:1px solid var(--line); border-radius:14px; padding:18px; }
+  .panel h2 { margin:0 0 12px; font-size:18px; }
+  .labelrow { display:flex; justify-content:space-between; gap:12px; align-items:center; font-weight:600; }
+  .tag { border-radius:999px; padding:5px 10px; font-size:12px; background:#eaf2fb; color:var(--blue); white-space:nowrap; }
+  .tag.green { background:#e8f5ef; color:var(--green); }
+  input[type=range] { width:100%; margin:18px 0 8px; accent-color:var(--blue); cursor:pointer; }
+  .green-range { accent-color:var(--green) !important; }
+  .hint { font-size:13px; color:var(--muted); line-height:1.45; }
+  .chartpanel { border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .charttitle { font-weight:700; margin:0 0 6px; }
+  svg { width:100%; height:auto; display:block; }
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:14px; }
+  .stat { background:var(--panel); border-radius:12px; padding:14px 16px; }
+  .stat small { display:block; color:var(--muted); margin-bottom:5px; }
+  .stat strong { font-size:25px; font-variant-numeric:tabular-nums; }
+  .note { margin:16px 2px 0; color:var(--muted); font-size:13px; line-height:1.5; }
+  .actions { display:flex; justify-content:flex-end; margin-top:14px; }
+  button { border:1px solid var(--line); background:#fff; color:var(--ink); padding:9px 14px; border-radius:9px; cursor:pointer; font-weight:600; }
+  button:hover { background:var(--panel); }
+  @media(max-width:650px) { body { padding:14px; } .controls { grid-template-columns:1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Priselasticitet – laborera med kurvorna</h1>
+  <p class="intro">En generell marknad för valfri produkt. Ändra hur priskänsliga köpare och säljare är och se hur jämvikten påverkas.</p>
+
+  <section class="controls">
+    <div class="panel">
+      <h2>Efterfrågan</h2>
+      <div class="labelrow"><span>Kurvans lutning</span><span class="tag" id="demandTag">Mellanläge</span></div>
+      <input id="demand" type="range" min="0.5" max="2.5" step="0.1" value="1.3">
+      <div class="labelrow"><span class="hint">Flackare</span><span class="hint">Brantare</span></div>
+      <p class="hint">Flackare kurva innebär generellt att efterfrågad mängd reagerar mer på en prisförändring.</p>
+    </div>
+    <div class="panel">
+      <h2>Utbud</h2>
+      <div class="labelrow"><span>Kurvans lutning</span><span class="tag green" id="supplyTag">Mellanläge</span></div>
+      <input id="supply" class="green-range" type="range" min="0.5" max="2.5" step="0.1" value="1.3">
+      <div class="labelrow"><span class="hint">Flackare</span><span class="hint">Brantare</span></div>
+      <p class="hint">Flackare kurva innebär generellt att utbjuden mängd reagerar mer på en prisförändring.</p>
+    </div>
+  </section>
+
+  <section class="chartpanel">
+    <p class="charttitle">Utbud och efterfrågan</p>
+    <svg id="chart" viewBox="0 0 760 440" role="img" aria-label="Diagram med utbuds- och efterfrågekurva samt jämviktspunkt">
+      <defs><clipPath id="plotClip"><rect x="76" y="32" width="630" height="340"/></clipPath></defs>
+      <g id="grid"></g>
+      <path d="M76 32 V372 H706" fill="none" stroke="#334155" stroke-width="2"/>
+      <g clip-path="url(#plotClip)">
+        <path id="demandLine" fill="none" stroke="#2878c8" stroke-width="5" stroke-linecap="round"/>
+        <path id="supplyLine" fill="none" stroke="#23966c" stroke-width="5" stroke-linecap="round"/>
+        <path id="guides" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="7 7"/>
+        <circle id="equilibrium" r="8" fill="#d97706" stroke="white" stroke-width="3"/>
+      </g>
+      <g font-family="Arial" font-size="15" fill="#243244">
+        <text x="390" y="423" text-anchor="middle">Kvantitet →</text>
+        <text x="20" y="205" text-anchor="middle" transform="rotate(-90 20 205)">Pris →</text>
+        <text x="88" y="22" fill="#2878c8" font-weight="bold">Efterfrågan</text>
+        <text x="590" y="22" fill="#23966c" font-weight="bold">Utbud</text>
+        <text id="eqLabel" x="0" y="0" fill="#b45309" font-weight="bold">Jämvikt</text>
+      </g>
+    </svg>
+    <div class="stats">
+      <div class="stat"><small>Jämviktspris (illustrativt)</small><strong id="price">—</strong></div>
+      <div class="stat"><small>Jämviktskvantitet (illustrativt)</small><strong id="quantity">—</strong></div>
+    </div>
+  </section>
+  <div class="actions"><button id="reset" type="button">Återställ modellen</button></div>
+  <p class="note"><strong>Att tänka på:</strong> Modellen visar linjära kurvor. Kurvans lutning är inte exakt samma sak som priselasticitet i procent; den faktiska elasticiteten beror också på pris- och kvantitetsnivån. Använd därför modellen för att illustrera skillnaden mellan flackare och brantare kurvor.</p>
+</main>
+<script>
+(() => {
+  const demand = document.getElementById('demand');
+  const supply = document.getElementById('supply');
+  const NS = 'http://www.w3.org/2000/svg';
+  const grid = document.getElementById('grid');
+  for (let i=0;i<=5;i++) {
+    const x=76+i*126, y=32+i*68;
+    const vx=document.createElementNS(NS,'line');
+    vx.setAttribute('x1',x); vx.setAttribute('x2',x); vx.setAttribute('y1',32); vx.setAttribute('y2',372);
+    vx.setAttribute('stroke','#e5eaf0'); vx.setAttribute('stroke-dasharray','4 5'); grid.appendChild(vx);
+    const hy=document.createElementNS(NS,'line');
+    hy.setAttribute('x1',76); hy.setAttribute('x2',706); hy.setAttribute('y1',y); hy.setAttribute('y2',y);
+    hy.setAttribute('stroke','#e5eaf0'); hy.setAttribute('stroke-dasharray','4 5'); grid.appendChild(hy);
+  }
+  const fmt = n => n.toFixed(1).replace('.',',');
+  function label(v) { return v < 1.05 ? 'Flackare' : v > 1.95 ? 'Brantare' : 'Mellanläge'; }
+  function update() {
+    const d=+demand.value, s=+supply.value;
+    // Linear curves: P_d = 100 - dQ; P_s = sQ. Intersection:
+    const q=100/(d+s), p=s*q;
+    const X=q/100*630+76, Y=372-p/100*340;
+    const dx1=76, dx2=706;
+    const dy1=372-(100-d*0)/100*340;
+    const dy2=372-(100-d*100)/100*340;
+    const sy1=372, sy2=372-(s*100)/100*340;
+    document.getElementById('demandLine').setAttribute('d',`M ${dx1} ${dy1} L ${dx2} ${dy2}`);
+    document.getElementById('supplyLine').setAttribute('d',`M ${dx1} ${sy1} L ${dx2} ${sy2}`);
+    document.getElementById('guides').setAttribute('d',`M ${X} ${Y} V 372 M 76 ${Y} H ${X}`);
+    document.getElementById('equilibrium').setAttribute('cx',X);
+    document.getElementById('equilibrium').setAttribute('cy',Y);
+    const labelEl=document.getElementById('eqLabel');
+    labelEl.setAttribute('x',Math.min(X+12,625)); labelEl.setAttribute('y',Math.max(Y-12,45));
+    document.getElementById('price').textContent=fmt(p);
+    document.getElementById('quantity').textContent=fmt(q);
+    document.getElementById('demandTag').textContent=label(d);
+    document.getElementById('supplyTag').textContent=label(s);
+  }
+  demand.addEventListener('input',update);
+  supply.addEventListener('input',update);
+  document.getElementById('reset').addEventListener('click',()=>{ demand.value=1.3; supply.value=1.3; update(); });
+  update();
+})();
+</script>
+</body>
+</html>
