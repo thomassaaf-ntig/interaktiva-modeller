@@ -18,6 +18,8 @@
   .panel { border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
   .panel h2 { margin:0 0 6px; font-size:18px; }
   .panel p.hint { margin:6px 0 0; }
+  .shift-panel summary { cursor:pointer; font-weight:600; }
+  .shift-panel .labelrow { margin-top:10px; font-size:14px; }
   .price-value { color:var(--purple); }
   .demand-value { color:var(--blue); }
   .supply-value { color:var(--green); }
@@ -31,6 +33,7 @@
   .hint { font-size:13px; color:var(--muted); line-height:1.45; }
   .chartpanel { border:1px solid var(--line); border-radius:14px; padding:16px; }
   .charttitle { font-weight:700; margin:0 0 6px; }
+  .reference-note { margin:8px 0 0; }
   svg { width:100%; height:auto; max-height:clamp(280px, calc(100vh - 235px), 450px); display:block; }
   .stats { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-top:8px; }
   .stat { background:var(--panel); border-radius:12px; padding:10px 12px; }
@@ -79,13 +82,29 @@
       <h2><label for="marketPrice">Valt marknadspris</label></h2>
       <div class="labelrow"><span class="hint">Prislinjen i diagrammet</span><output class="price-value" id="marketPriceValue" for="marketPrice"></output></div>
       <input id="marketPrice" type="range" min="0" max="100" step="1" value="50">
-      <div class="labelrow"><span class="hint">0</span><span class="hint">100</span></div>
+      <div class="labelrow"><span class="hint">0</span><span class="hint" id="marketPriceMax">100</span></div>
       <div class="stats">
         <div class="stat"><small>Efterfrågad mängd</small><strong class="demand-value" id="demanded"></strong></div>
         <div class="stat"><small>Utbjuden mängd</small><strong class="supply-value" id="supplied"></strong></div>
       </div>
       <p class="balance" id="marketBalance"></p>
     </div>
+    <details class="panel shift-panel">
+      <summary>Förskjut kurvorna</summary>
+      <p class="hint">Efterfrågan flyttas uppåt med plus och nedåt med minus, i prisenheter.</p>
+      <div class="labelrow">
+        <label for="demandShift">Förskjut efterfrågan</label>
+        <output class="demand-value" id="demandShiftValue" for="demandShift">0</output>
+      </div>
+      <input id="demandShift" type="range" min="-10" max="10" step="1" value="0">
+      <div class="labelrow">
+        <label for="supplyShift">Förskjut utbudet i antal enheter</label>
+        <output class="supply-value" id="supplyShiftValue" for="supplyShift">0</output>
+      </div>
+      <input id="supplyShift" class="green-range" type="range" min="-10" max="10" step="1" value="0" aria-describedby="supplyShiftHint">
+      <div class="labelrow"><span class="hint">−10 · Mindre utbud</span><span class="hint">+10 · Större utbud</span></div>
+      <p class="hint" id="supplyShiftHint">Utbudskurvan flyttas i sidled. Prova minus för att illustrera högre produktionskostnader och plus för att illustrera effekten av en subvention.</p>
+    </details>
     <div class="actions"><button id="reset" type="button">Återställ modellen</button></div>
   </section>
 
@@ -96,6 +115,8 @@
       <g id="grid"></g>
       <path d="M76 32 V372 H706" fill="none" stroke="#334155" stroke-width="2"/>
       <g clip-path="url(#plotClip)">
+        <path id="demandReference" fill="none" stroke="var(--blue)" stroke-opacity="0.65" stroke-width="2.5" stroke-dasharray="5 5"/>
+        <path id="supplyReference" fill="none" stroke="var(--green)" stroke-opacity="0.65" stroke-width="2.5" stroke-dasharray="5 5"/>
         <path id="demandLine" fill="none" stroke="#2878c8" stroke-width="5" stroke-linecap="round"/>
         <path id="supplyLine" fill="none" stroke="#23966c" stroke-width="5" stroke-linecap="round"/>
         <path id="guides" fill="none" stroke="#64748b" stroke-width="2" stroke-dasharray="7 7"/>
@@ -118,6 +139,7 @@
       <div class="stat"><small>Jämviktspris (illustrativt)</small><strong id="price">—</strong></div>
       <div class="stat"><small>Jämviktskvantitet (illustrativt)</small><strong id="quantity">—</strong></div>
     </div>
+    <p class="hint reference-note" id="referenceNote" hidden></p>
   </section>
   <p class="note"><strong>Att tänka på:</strong> <span id="curveNote"></span> Priselasticitet mäter hur många procent mängden förändras när priset ändras med en procent. Den beror på var på kurvan man mäter.</p>
 </main>
@@ -127,10 +149,12 @@
   const supply = document.getElementById('supply');
   const marketPrice = document.getElementById('marketPrice');
   const curveType = document.getElementById('curveType');
+  const demandShift = document.getElementById('demandShift');
+  const supplyShift = document.getElementById('supplyShift');
   const NS = 'http://www.w3.org/2000/svg';
   const grid = document.getElementById('grid');
-  const yForPrice = price => 372 - price / 100 * 340;
   const quantityTicks = [];
+  const priceTicks = [];
   function addTick(value, x, y, anchor) {
     const tick = document.createElementNS(NS, 'text');
     tick.setAttribute('x', x);
@@ -151,7 +175,7 @@
     hy.setAttribute('x1',76); hy.setAttribute('x2',706); hy.setAttribute('y1',y); hy.setAttribute('y2',y);
     hy.setAttribute('stroke','#e5eaf0'); hy.setAttribute('stroke-dasharray','4 5'); grid.appendChild(hy);
     quantityTicks.push(addTick(i * 40, x, 395, 'middle'));
-    addTick(100 - i * 20, 65, y + 5, 'end');
+    priceTicks.push(addTick(100 - i * 20, 65, y + 5, 'end'));
   }
   const fmt = n => n.toFixed(1).replace('.',',');
   function drawQuantityAtPrice(side, x, y, isEquilibrium) {
@@ -162,17 +186,17 @@
     document.getElementById(side + 'Projection').setAttribute('d', isEquilibrium ? '' : `M ${x} ${y} V 372`);
   }
   function label(v) { return v < 1.05 ? 'Flackare' : v > 1.95 ? 'Brantare' : 'Mellanläge'; }
-  function curvePath(quantityAtPrice, xForQuantity, step) {
-    const points = [];
-    for (let price = 0; price <= 100; price += step) {
+  function curvePath(quantityAtPrice, xForQuantity, yForPrice, startPrice, endPrice) {
+    const points = [`${xForQuantity(quantityAtPrice(startPrice))} ${yForPrice(startPrice)}`];
+    for (let price = Math.floor(startPrice) + 1; price <= endPrice; price++) {
       points.push(`${xForQuantity(quantityAtPrice(price))} ${yForPrice(price)}`);
     }
     return 'M ' + points.join(' L ');
   }
-  function findEquilibriumPrice(demandAt, supplyAt) {
+  function findEquilibriumPrice(demandAt, supplyAt, maxPrice) {
     // Efterfrågan sjunker och utbudet stiger med priset.
     let low = 0;
-    let high = 100;
+    let high = maxPrice;
     for (let i = 0; i < 45; i++) {
       const mid = (low + high) / 2;
       if (demandAt(mid) > supplyAt(mid)) low = mid;
@@ -184,21 +208,44 @@
     const d = +demand.value;
     const s = +supply.value;
     const exponential = curveType.value === 'exponential';
-    const maxQuantity = exponential ? 300 : 200;
+    const demandOffset = +demandShift.value;
+    const supplyOffset = +supplyShift.value;
+    const shifted = demandOffset !== 0 || supplyOffset !== 0;
+    // Efterfrågan förskjuts i prisled och utbudet i kvantitetsled.
+    const baseDemand = exponential ? price => (100 / d) * 2 ** (-price / 50) : price => Math.max(0, (100 - price) / d);
+    const baseSupply = exponential ? price => Math.max(0, (50 / s) * (2 ** (price / 50) - 1)) : price => Math.max(0, price / s);
+    const demandAt = price => baseDemand(price - demandOffset);
+    const supplyAt = price => Math.max(0, baseSupply(price) + supplyOffset);
+    const maxPrice = demandOffset > 0 || demandAt(100) >= supplyAt(100) ? 120 : 100;
+    const largestQuantity = Math.max(exponential ? 300 : 200, demandAt(0), supplyAt(maxPrice), baseSupply(maxPrice));
+    const maxQuantity = Math.ceil(largestQuantity / 50) * 50;
     const xForQuantity = quantity => 76 + quantity / maxQuantity * 630;
+    const yForPrice = price => 372 - price / maxPrice * 340;
     quantityTicks.forEach((tick, i) => { tick.textContent = i * maxQuantity / 5; });
-    // Båda kurvtyperna ger samma respektive mängd vid pris 50.
-    const demandAt = exponential ? price => (100 / d) * 2 ** (-price / 50) : price => (100 - price) / d;
-    const supplyAt = exponential ? price => (50 / s) * (2 ** (price / 50) - 1) : price => price / s;
-    const p = exponential ? findEquilibriumPrice(demandAt, supplyAt) : s * (100 / (d + s));
-    const q = exponential ? demandAt(p) : 100 / (d + s);
+    priceTicks.forEach((tick, i) => { tick.textContent = (5 - i) * maxPrice / 5; });
+    marketPrice.max = maxPrice;
+    document.getElementById('marketPriceMax').textContent = maxPrice;
+    const basePrice = exponential ? findEquilibriumPrice(baseDemand, baseSupply, 100) : s * (100 / (d + s));
+    const p = shifted ? findEquilibriumPrice(demandAt, supplyAt, maxPrice) : basePrice;
+    const q = shifted || exponential ? demandAt(p) : 100 / (d + s);
     const X=xForQuantity(q), Y=yForPrice(p);
-    const plotStep = exponential ? 1 : 100;
-    document.getElementById('demandLine').setAttribute('d', curvePath(demandAt, xForQuantity, plotStep));
-    document.getElementById('supplyLine').setAttribute('d', curvePath(supplyAt, xForQuantity, plotStep));
+    const demandEnd = exponential ? maxPrice : Math.min(maxPrice, 100 + demandOffset);
+    const demandPath = (fn, end) => curvePath(fn, xForQuantity, yForPrice, 0, end);
+    const supplyPath = (fn, start) => curvePath(fn, xForQuantity, yForPrice, start, maxPrice);
+    document.getElementById('demandLine').setAttribute('d', demandPath(demandAt, demandEnd));
+    const unitsToRecover = Math.max(0, -supplyOffset);
+    const supplyStart = exponential ? 50 * Math.log2(1 + s * unitsToRecover / 50) : s * unitsToRecover;
+    document.getElementById('supplyLine').setAttribute('d', supplyPath(supplyAt, supplyStart));
+    document.getElementById('demandReference').setAttribute('d', demandOffset ? demandPath(baseDemand, exponential ? maxPrice : 100) : '');
+    document.getElementById('supplyReference').setAttribute('d', supplyOffset ? supplyPath(baseSupply, 0) : '');
+    document.getElementById('demandShiftValue').textContent = demandOffset > 0 ? '+' + demandOffset : demandOffset;
+    document.getElementById('supplyShiftValue').textContent = supplyOffset > 0 ? '+' + supplyOffset : supplyOffset;
+    const referenceNote = document.getElementById('referenceNote');
+    referenceNote.hidden = !shifted;
+    referenceNote.textContent = `Streckade kurvor visar läget före förskjutningen. Då var jämviktspriset ${fmt(basePrice)} och jämviktskvantiteten ${fmt(baseDemand(basePrice))}.`;
     document.getElementById('curveNote').textContent = exponential
       ? 'Efterfrågad mängd närmar sig noll när priset stiger och är positiv vid alla ändliga priser.'
-      : 'Kurvorna är räta linjer. I modellen blir efterfrågad mängd noll vid priset 100.';
+      : `Kurvorna är räta linjer. I modellen blir efterfrågad mängd noll vid priset ${100 + demandOffset}.`;
     document.getElementById('guides').setAttribute('d',`M ${X} ${Y} V 372 M 76 ${Y} H ${X}`);
     document.getElementById('equilibrium').setAttribute('cx',X);
     document.getElementById('equilibrium').setAttribute('cy',Y);
@@ -234,10 +281,12 @@
   demand.addEventListener('input',update);
   supply.addEventListener('input',update);
   marketPrice.addEventListener('input', update);
+  demandShift.addEventListener('input', update);
+  supplyShift.addEventListener('input', update);
   curveType.addEventListener('change', update);
   document.getElementById('reset').addEventListener('click', () => {
     curveType.selectedIndex = 0;
-    for (const slider of [demand, supply, marketPrice]) slider.value = slider.defaultValue;
+    for (const slider of [demand, supply, marketPrice, demandShift, supplyShift]) slider.value = slider.defaultValue;
     update();
   });
   update();
